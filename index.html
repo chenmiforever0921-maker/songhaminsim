@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>松河民孩子模拟器</title>
+<meta name="theme-color" content="#0f0f25" />
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #080814;
+    font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #e8e8f0;
+    overscroll-behavior-y: none;
+    min-height: 100vh;
+  }
+  button { font-family: inherit; -webkit-appearance: none; }
+  #root { min-height: 100vh; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fadein { animation: fadeIn 0.35s ease both; }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+// ───── 场景 ─────（按年龄从小到大排序：young → all → middle）
+// firstdad 永远是新一天的第一个场景，避免新玩家不认识爹地/爸比
+const SCENARIOS = [
+  {
+    id: "firstdad",
+    title: "你第一次叫爸爸",
+    icon: "👶",
+    age: "young",
+    desc: "你大约一岁多，刚学会几个音节。爹地爸比都期待的看着你。\n「你觉得宝宝会先叫我还是你？」\n「是我。」\n「我觉得是我。」\n「为什么？是我才对...」\n「哥，宝宝我抱得最多好吗？」\n「她一看见我就笑诶。」\n可惜这个时候的你还听不懂他们在说什么，错过了他们为你「争风吃醋」。",
+    choices: [
+      {
+        text: "当你看着松河爹地喊「爹地」",
+        effect: { sm: 5, hm: -1, liang: 2 },
+        icon: "🍼",
+        result: "爹地显然表情管理失败：「她叫我了对不对？是不是叫我了？」\n「对，她叫你了。哥，原来宝宝爱哭是遗传的你啊。」爸比伸手摸了摸爹地的脸，安抚着有些激动的爹地。"
+      },
+      {
+        text: "当你看着河民爸比喊「爸比」",
+        effect: { hm: 5, sm: -1, liang: 2 },
+        icon: "🥺",
+        result: "爸比立刻抱起你：「我们宝宝好聪明，这么快就会说话了，好棒。」爹地在旁边咳了一声，小声的自言自语：「什么时候叫我啊...宝宝」\n爸比歪着头看自家哥哥，就算已经做爹地了，哥哥还是这样爱撒娇呢。"
+      },
+      {
+        text: "看着两人一起喊「爸、爸...」",
+        effect: { sm: 4, hm: 4, liang: 6 },
+        icon: "✨",
+        result: "「哈民啊！相机呢？我要录下来，我相机呢？」爹地眼睛盯着我，大手不停的拍爸比的手臂。\n啧，爹地下手真重啊。\n「在这里在这里，我来拍。」河民爸比倒是习惯了，很快翻出相机。\n「哥，看这里。」爸比把爹地揽到怀里，我在爹地的怀里，相机对着我们咔嚓两下。\n这应该是我们家的第一张全家福。"
+      },
+      {
+        text: "结果喊了「妈咪」",
+        effect: { sm: -1, hm: -1, liang: 4 },
+        icon: "😅",
+        result: "爹地爸比面面相觑五秒。\n「谁是妈咪？」\n「额...」爸比看向爹地，试探着问：「要不我们石头剪刀布吧？」\n啧，先提出的人，总是输家。今天是哈民妈咪~\n✨ 解锁【这下尴尬了】"
+      }
+    ]
+  },
+  {
+    id: "sleep",
+    title: "两个贪睡鬼赖床",
+    icon: "😴",
+    age: "young",
+    desc: "清晨，你醒了但假装闭眼。爹地好像也在赖床：「不想起...」爸比无奈之，只能来哄两个赖床的贪睡鬼。",
+    choices: [
+      {
+        text: "还是继续装睡吧？",
+        effect: { hm: 5, sm: 5, liang: 6 },
+        icon: "💞",
+        result: "「哥，要迟到啦，最多再睡五分钟。」\n「你亲我一下，我就醒了。」\n你偷偷睁眼，看到爹地摸着自己的嘴唇，不知道在笑什么。\n✨ 解锁【贪睡同盟】"
+      },
+      {
+        text: "「我也不想起...」",
+        effect: { sm: 3, hm: 2, liang: 1 },
+        icon: "🌷",
+        result: "被爸比发现你在浑水摸鱼装睡，爸比把你抱起来，蹭蹭你的脸颊：「起来吃早饭啦。」\n「我也不想起...」你伸手找爹地，试图回到温暖的被窝。"
+      },
+      {
+        text: "问爸比有没有做好吃的早饭",
+        effect: { hm: 3, sm: 1 },
+        icon: "📌",
+        result: "「当然有啊。」爸比把你举高高。\n好吧，为了好吃的食物，今天就起床吧。"
+      },
+      {
+        text: "缩进爹地的怀里",
+        effect: { secret: 1, qv: 1 },
+        icon: "🤔",
+        result: "被子外面的世界很危险，但是爹地的怀抱很安全。"
+      }
+    ]
+  },
+  {
+    id: "story",
+    title: "谁给你讲睡前故事",
+    icon: "📖",
+    age: "young",
+    desc: "每天晚上都要听睡前故事才能睡着的你，今天要选谁讲故事呢？",
+    choices: [
+      {
+        text: "今天选爸比",
+        effect: { hm: 5, sm: 5, liang: 6 },
+        icon: "💞",
+        result: "虽然你很喜欢爸比，但是不得不说他讲故事的水平很一般。爸比拿着故事书，念得一本正经，甚至不如你哭的时候哄得有感情。\n我还没说什么，爹地先忍不住了，从旁边凑过来说：「你这样念，她会睡不着的。」爸比瘪瘪嘴，有些不开心被数落。\n这下好了，现在爹地要哄两个小朋友睡觉了。\n✨ 解锁【夹心饼干】"
+      },
+      {
+        text: "想听听爹地有什么新故事呢",
+        effect: { sm: 4, liang: 3 },
+        icon: "🌷",
+        result: "爹地翻开故事书，开始绘声绘色地讲。\n不知道为什么，讲着讲着，爹地就靠在了爸比肩上，睡在中间的你，好像变成了自己最喜欢吃的夹心饼干。\n爹地的声音越来越温柔，你慢慢陷入了睡眠。"
+      },
+      {
+        text: "「可不可以一起给我讲故事呀？」",
+        effect: { sm: 3, hm: 3, liang: 8 },
+        icon: "📌",
+        result: "「当然可以啊。」\n于是爸比变成了故事里面王子，爹地变成了故事里的睡美人。故事讲到王子冲破层层荆棘，进入城堡想要唤醒公主时，爸比温热的大手覆上你的眼睛：「宝宝，故事讲完了，快睡吧。」\n诶？这就是故事的结尾吗？你不解但听话的闭上眼。\n诶？这是什么声音呢？\n「mua」一声，在安静的夜晚格外清晰。"
+      },
+      {
+        text: "「我已经长大了，我不需要听故事也可以睡觉啦！」",
+        effect: { secret: 1, qv: 1 },
+        icon: "🌙",
+        result: "「那...宝宝可以自己睡觉了吗？」爹地笑眯眯的捏了一下你的脸颊。\n「诶？...」你黑溜溜的眼睛转了转，选择装作没有听见闭上了眼。睡着了就不用回答问题了！\n「哥，宝宝还小，现在就分房，她不一定能适应。」\n对啊对啊，还是爸比好对我好。\n「那你，还能忍？」\n忍什么？爹地在说什么啊？\n「...过完这个生日就分房吧，也该试着让宝宝一个人睡了。」\n莫呀？爸比我对你很失望！\n我还有三天就过生日了！你刚刚不是这样说的！"
+      }
+    ]
+  },
+  {
+    id: "birthday",
+    title: "今天是我生日",
+    icon: "🎂",
+    age: "all",
+    desc: "清晨，你揉着眼睛坐起来，发现房间里挂满彩带，厨房飘来了食物美味的香气。",
+    choices: [
+      {
+        text: "先去找爸比",
+        effect: { hm: 5, liang: 2 },
+        icon: "🎈",
+        result: "你跳下床，光着脚跑向厨房，从背后抱住爸比的腿。爸比身体微微一僵，然后低头看你：「醒了？」\n你点点头，脸埋在他腿上蹭了蹭。爸比关小灶火，蹲下来，捏捏你肉肉的脸颊：「生日快乐。」"
+      },
+      {
+        text: "先去找爹地",
+        effect: { sm: 5, liang: 2 },
+        icon: "📋",
+        result: "你跳下床，跑出房间。爹地正站在餐桌旁摆碗筷，听到你的声音立刻转过身，张开手臂接住扑过来的你。\n「生日快乐我的小公主！」爹地把你举起来转了一圈，你笑得咯咯响。\n爸比从厨房探过头，嘴角弯弯露出酒窝，而后又转身回去继续炒菜。"
+      },
+      {
+        text: "偷偷看两爸说悄悄话",
+        effect: { liang: 8, secret: -1 },
+        icon: "💍",
+        result: "你醒了，然后听到客厅的脚步声和压低声音的对话，你悄悄把门开了一条缝。\n爹地和爸比站在客厅，爹地手里拿着一个红色的小盒子。\n「你什么时候去订的？」爸比接过盒子，很是好奇小朋友的物件。「上个月订的，宝宝的是小项链，还定了同系列的对戒，你的在床头柜。」爹地笑着说。\n「哥！」爸比看起来很惊喜。\n「你也是我的宝宝啊。」\n哇哦，恭喜爹地获得爸比的香吻一枚。\n✨ 解锁【家族信物】"
+      },
+      {
+        text: "宣布今年的生日愿望",
+        effect: { hm: 5, sm: -1, liang: 1 },
+        icon: "🍜",
+        result: "爹地点上了生日蜡烛。小小的蛋糕上烛火在跳跃。\n「许愿吧宝贝！」爹地拍着手，为你唱生日祝福歌。爸比很是欣慰的看着你，大概是，看着自己的小朋友又长一岁的那种感慨吧。\n你闭上眼睛，双手合十。\n「希望，我和爹地、爸比永远在一起！」"
+      }
+    ]
+  },
+  {
+    id: "thunder",
+    title: "半夜打雷，你很怕",
+    icon: "⛈️",
+    age: "young",
+    desc: "分房之后遇上半夜打雷，你睡不着于是跑去爹爸的房间。很幸运，他们还没睡。",
+    choices: [
+      {
+        text: "扑向松河爹地",
+        effect: { sm: 5 },
+        icon: "🌙",
+        result: "他放下手机，摸摸你的头：「怎么还没睡觉呢？」你在他怀里蹭来蹭去，他轻轻拍着你的背，哄你睡觉。\n「快睡吧，明天早上爸比会给你做好吃的。」\n真的吗？不知道我爸比有没有听见爹地给他安排的任务。"
+      },
+      {
+        text: "扑向河民爸爸",
+        effect: { hm: 5 },
+        icon: "🛌",
+        result: "他把你提溜起来，抱进自己怀里：「要和我们一起睡吗？」爹地从自己靠背后扯出玉桂狗玩偶递给爸比：「让她抱着睡吧，宝宝喜欢这个。」\n其实并不，我用现在还胖嘟嘟的手推开玩偶，手脚并用的爬到他们中间，终于心满意足的闭上眼。\n恩，这才是我的位置啊~"
+      },
+      {
+        text: "站在门口等他们发现你",
+        effect: { sm: 3, hm: 3, liang: 2 },
+        icon: "🥹",
+        result: "爸比先看见你：「宝宝？」爹地打开卧室白炽灯，然后看清真的是你站在门外。\n「外面打雷了，她被吓到了吧。」爹地边说边下床，他走过来单手将你抱起，一只手捂住你的耳朵，温柔的安抚你：「没事了，爹地爸比会保护你的。」"
+      },
+      {
+        text: "大声哭",
+        effect: { hm: 4, sm: 2, liang: 3 },
+        icon: "😭",
+        result: "爹地、爸比脚步匆匆的推开你的房间门，两个人都眉头紧锁，大概是因为担心你。爸比蹲在床边，用他的睡衣衣袖给你擦眼泪，你扯着他的衣摆不放。\n「哥，你先回去睡？我来哄宝宝？」爸比还惦记着爹地明天要早起赶飞机的事情。\n「把宝宝抱过去睡吧，不然我也睡不着。」\n爹地是因为担心你，才睡不着？还是爸比不在，他睡不着？\nEmmm...这是一个问题。"
+      }
+    ]
+  },
+  {
+    id: "business_trip",
+    title: "松河爹地出差回来",
+    icon: "🧳",
+    age: "all",
+    desc: "爹地为期一周的出差终于结束，爸比从下午就开始做菜，你也在客厅等门铃。你搬了小凳子坐在玄关，盯着大门。爸比走过来把你的小凳子往后挪了半米：「别挡路。」",
+    choices: [
+      {
+        text: "听见门响，马上冲过去迎接",
+        effect: { sm: 5, liang: 2 },
+        icon: "🏃",
+        result: "门刚开一条缝，你就扑上去抱住了爹地的腿：「爹地！」\n爹地手里的行李箱还没放下，被你撞得往后退了一步。他笑着蹲下身，把你整个人捞进怀里：「哎哟，我的小宝贝！」\n你搂着他的脖子不肯松手。"
+      },
+      {
+        text: "把开门的机会让给爸比",
+        effect: { hm: 3, sm: 2, liang: 4 },
+        icon: "🚪",
+        result: "门铃响了。\n但你坐在沙发上看绘本，没动：「爸比，开门！」\n爸比放下锅铲，擦了擦手，才走向门口。你从书后面抬起眼睛，看到他打开门之前，先用手机前置摄像头整理一下自己的头发。"
+      },
+      {
+        text: "翻他行李箱找礼物",
+        effect: { sm: 3, qv: -1 },
+        icon: "🎁",
+        result: "「爹地！礼物呢？」爹地刚进门，就被你这句话噎了一下。\n他行李箱都还没来得及放下：「……宝贝，你不先抱抱我吗？」\n你这才抱了他一下，眼睛依然继续盯着行李箱：「你说过会给我带礼物的！」\n爹地哭笑不得，蹲下来打开行李箱。你蹲在旁边，眼睛亮晶晶的。爸比从厨房走出来，靠在墙上，双手抱胸看着你们。"
+      },
+      {
+        text: "问他有没有想你和爸比",
+        effect: { sm: -1, hm: 3, liang: 5 },
+        icon: "💬",
+        result: "爹地刚进门，你就扑上去抱住他。你仰着脸撒娇：「爹地，你有没有想我和爸比？」\n「当然想。每天都想。」\n「那你想谁比较多？我还是爸比？」你追问。\n空气安静了一秒。\n爸比也从厨房探出头，盯着你们看。\n爹地额头冒汗：「宝贝，这个不能选...」"
+      }
+    ]
+  },
+  {
+    id: "nickname",
+    title: "无意中喊出哥哥的小名",
+    icon: "🤭",
+    age: "young",
+    desc: "你听爸比叫了一句「哈nim」，第二天也跟着这么喊。",
+    choices: [
+      {
+        text: "当着外人喊「哈nim」",
+        effect: { sm: -3, liang: -1 },
+        icon: "😬",
+        result: "爹地的表情管理保持的很好，大家应该都没有看出他的僵硬。但是你和爸比除外。\n回家后，爹地蹲在你面前，循循善诱：「宝宝，那个不能在外面叫的。而且...你叫也很奇怪。」\n为什么呢？你不解，只看见爹地有些埋怨的看着爸比：「都怪你，在宝宝面前要懂礼貌，做好榜样知道吗？」\n「知道了，哥哥~」爸比笑着拖长声音叫爹地。"
+      },
+      {
+        text: "在家偷偷喊",
+        effect: { hm: 3, sm: 1, liang: 3 },
+        icon: "🌚",
+        result: "爹地看起来有些不知所措，抓了抓自己头发，背过身不知道忙什么去了。\n爸比食指轻轻刮了一下你的鼻子。\n你知道，这是在表示赞同，你跟爸比成为了同盟诶。\n你们都有同一个，亲爱的。\n✨ 解锁【哥哥的小名】"
+      },
+      {
+        text: "问爸比为什么这样叫",
+        effect: { hm: 4, liang: 4 },
+        icon: "💬",
+        result: "爸比冲你眨巴眨巴眼：「等你长大就知道了。」爹地转过头，有些无奈：「别教坏宝宝。」\n爸比摊开了手，以示无辜。"
+      },
+      {
+        text: "问爹地喜欢这个昵称吗",
+        effect: { sm: -2, liang: 4 },
+        icon: "😏",
+        result: "爹地沉默了一下：「一般吧。」\n可是爸比这样叫他，他分明笑得很开心啊。\n大人的喜欢为什么这么难懂？"
+      }
+    ]
+  },
+  {
+    id: "food",
+    title: "爸比做了好吃的",
+    icon: "🍳",
+    age: "all",
+    desc: "你昨天放学回来说想要吃葱饼，今天早上厨房就飘来香味。",
+    choices: [
+      {
+        text: "大力夸！太好吃了！",
+        effect: { hm: 3, liang: 1 },
+        icon: "🤩",
+        result: "猛吃一口后，被味道惊艳到。爸比超开心你喜欢吃，爹地在旁边冷不丁冒出一句：「我也会做。」\n真的吗？爹地...上次把锅烧糊的是谁..."
+      },
+      {
+        text: "问能不能再来一份",
+        effect: { hm: 4, qv: -1 },
+        icon: "🍽️",
+        result: "爸比立刻回到厨房，继续挥舞锅铲。爹地尾随其后，大概是去当试菜小弟了。"
+      },
+      {
+        text: "问爹地为什么不做饭",
+        effect: { sm: -2, hm: 2, liang: 2 },
+        icon: "🤔",
+        result: "「我……负责其他事。」爹地下意识摸了摸耳朵。\n爸比表情管理很是失败，你一眼就能看出他的笑意。当然了，这方面你也是随他的。\n所以无可避免的，你和爸比都被爹地瞪了一眼。"
+      },
+      {
+        text: "说不饿，不想吃",
+        effect: { hm: -1, sm: 2 },
+        icon: "😶",
+        result: "爸比有些失落，他可是有好好学习菜谱，昨天还专门去超市买了新的食材。\n「哈民nim，我有点饿了，好想吃葱饼。」一旁的爹地突然说道。"
+      }
+    ]
+  },
+  {
+    id: "exam",
+    title: "考砸了，卷子要签字",
+    icon: "📝",
+    age: "all",
+    desc: "64分。卷子在书包里，你在思考找谁签字。",
+    choices: [
+      {
+        text: "给爹地签",
+        effect: { sm: 3, qv: 2 },
+        icon: "😐",
+        result: "爹地睁大眼睛盯着红色的数字，然后把试卷来回翻看。\n「核桃。」噢no...爹地叫你名字了，每次他叫你名字的时候，你就知道，要被训了。虽然爹地很温柔，但是也很严格来着。\n「这个成绩，简直全方面完蛋呢。」\n...他怎么能用这样温柔的语气、漂亮的脸蛋说出这样冰冷的话？"
+      },
+      {
+        text: "给河民爸爸签",
+        effect: { hm: 3, secret: 1 },
+        icon: "😮‍💨",
+        result: "爸比无声的叹了口气：「没事的...没事的...」不知道是在安慰你还是安慰他自己。\n他担心的问你这次怎么了，是不是上课没有听懂。"
+      },
+      {
+        text: "两个都交",
+        effect: { sm: 2, hm: 2, liang: 2 },
+        icon: "🫡",
+        result: "两个人坐在一起都盯着试卷看，你有些不安，因为爹地看起来很严肃。\n不过还好，爸比也在，等下被爹地训，他应该会缓和一下气氛的。\n还好还好。"
+      },
+      {
+        text: "把试卷藏起来",
+        effect: { secret: 3, qv: -3 },
+        icon: "🫠",
+        result: "秘密槽+3。心虚的不和爹地爸比对视，吃完饭就溜回房间，思考模仿谁的签名才不会被发现。"
+      }
+    ]
+  },
+  {
+    id: "sports",
+    title: "亲子运动会来了",
+    icon: "🏃",
+    age: "all",
+    desc: "亲子接力跑，爹地爸比同时举手，两个人都跃跃欲试。其实你早就知道，跑得最快的是爹地。",
+    choices: [
+      {
+        text: "帮河民爸比说话：「让爸比跑吧」",
+        effect: { hm: 4, sm: 1, liang: 2 },
+        icon: "🏆",
+        result: "爹地挑眉：「宝宝，可是我跑的比较快诶？」\n你仰视他俩，扯了扯爹地的衣摆，他顺从的蹲下来侧耳听你的悄悄话。「可是爸比看起来很想参加诶。」你小声的和爹地商量。\n爹地笑着摸摸你的头：「我们宝宝真乖。」他看起来很欣慰。"
+      },
+      {
+        text: "帮松河爹地说话：「爹地跑得最快」",
+        effect: { sm: 4, hm: -1, liang: 1 },
+        icon: "💪",
+        result: "爸比举手投降，他笑着点头：「我承认。」\n爹地果然是所有家长里跑得最快的，冲线那一刻，他转头看向了观众席。\n爸比拍下了那瞬间。"
+      },
+      {
+        text: "让他们自己决定",
+        effect: { liang: 4 },
+        icon: "✌️",
+        result: "爹地和爸比选择猜拳。\n虽然爹地赢了，但是。\n「谁说赢家去跑？赢家可以选择让输家去跑啊。」爹地真是诡辩小能手。\n爸比虽然无奈但是早已习惯：「我就知道...哥又来这样。」\n你看见爹地伸手给爸比顺了顺毛，如你所料，爸比很吃这招。"
+      },
+      {
+        text: "不想让他们参加这个项目",
+        effect: { sm: 2, hm: 2, liang: 2, qv: -1 },
+        icon: "🩹",
+        result: "你牵着他俩的手，不愿意撒手。\n「宝宝，要去检录处了，我们一起过去好不好？」爸比以为你是因为比赛紧张，安抚似的捏捏你的小手。\n「不要...上次爹地跑步就扭到了脚，我不想参加这个。」\n爹地蹲下来，和你商量：「那次是意外，我们保证这次不会受伤，好不好？」"
+      }
+    ]
+  },
+
+  {
+    id: "trouble", title: "上课调皮，老师叫家长", icon: "🏫", age: "all",
+    desc: "班主任让联系家长。你盯着手机，爹地和爸比的名字在屏幕上等着你选。",
+    choices: [
+      { text: "叫爹地来", effect: { sm: 2, qv: 1 }, icon: "🫡",
+        result: "爹地匆匆赶来，进门先对老师礼貌一笑：\u201C抱歉给您添麻烦了。\u201D老师还没开口，爹地已经蹲下来，看着你的眼睛，轻声询问的：\u201C宝贝，跟爹地说，发生了什么事？\u201D" },
+      { text: "叫河民爸爸", effect: { hm: 3, sm: -1 }, icon: "🥺",
+        result: "他先问你有没有受委屈，而后听完老师讲述你的调皮事件后，嘴巴一张一合了半天，实在无从辩解。\n最后只能干巴巴说：\u201C抱歉，她在家不会这样，可能是还不适应幼儿园的环境。我会好好跟她说的。\u201D\n你抬头仰视爸比的侧脸，他对你眨了一下眼。" },
+      { text: "两个都叫", effect: { sm: 1, hm: 1, liang: -2 }, icon: "😱",
+        result: "爹地认真道歉，爸比在旁边点头。\n\u201C老师，这件事我会负责和对方家长沟通。但我女儿平时很乖，她这样做应该有原因，我回去会问清楚。\u201D爹地虽然因为你给老师惹麻烦所以道歉，但并不会盲目责怪你闯祸。\n\u201C孩子还小，家长是需要好好引导，但是也不要过分责怪。\u201D老师点点头，补充道。\n爸比在旁边补充：\u201C我们不会打她。\u201D\n爹地看了爸比一眼，小声说：\u201C我没说要打\u201D。" },
+      { text: "不叫任何人", effect: { secret: 2, qv: -4 }, icon: "🤦",
+        result: "老师拿回手机，由她来拨打电话。\n你猜，来的应该是爸比，因为爹地不爱接电话。秘密槽+2。" },
+    ]
+  },
+  {
+    id: "argue", title: "爹爸今天气氛不对", icon: "⚡", age: "all",
+    desc: "你发现今天家里的气氛不太对，然后你听见爹地和爸比在进行一些不开心的对话，俗称：吵架。",
+    choices: [
+      { text: "躲进房间", effect: { secret: 1, liang: -2 }, icon: "🙈",
+        result: "你抱着兔子转身跑回房间，把门关了一条缝，耳朵贴在门板上。\n客厅的声音断断续续传过来。\n\u201C你在凶我吗？\u201D是爹地的声音。\n\u201C我不是在凶你。哥，我只是...声音大了一点。\u201D\n\u201C大声就是在凶我。\u201D\n\u201C那不说话是不是冷战？哥，你冷暴力我。\u201D\n\u201C我在说话啊...\u201D\n你松了一口气。因为对话一般进行到这个阶段时，吵架就接近尾声了。" },
+      { text: "出去说\u201C你们别吵了\u201D", effect: { liang: 6, qv: 3 }, icon: "🕊️",
+        result: "你抱着兔子走到客厅中央，大声说：\u201C你们别吵了！\u201D\n两个人同时愣住，看向你。爹地第一个反应过来，蹲下来朝你张开手臂：\u201C宝贝，我们没有吵架。\u201D\n爸比也走过来，他俯身摸摸你埋在爹地怀里的头：\u201C对不起，我们声音太大了。我们只是在讨论事情。\u201D\n✨ 解锁【小大人】" },
+      { text: "站到爹地那边", effect: { sm: 3, hm: -1, liang: 4 }, icon: "⚖️",
+        result: "你走到爹地旁边，拉住他的手：\u201C爹地是对的。\u201D\n爸比：？？？\n\u201C爹地不会害爸比，爹地最爱的就是爸比。所以爸比，要和我一样听话噢。\u201D\n爸比的表情顿了一下，然后别过脸。\n不过为什么爸比的耳朵一下子就变红了呀？" },
+      { text: "站到爸比那边", effect: { sm: 2, hm: 2, liang: 5 }, icon: "😶",
+        result: "你走到爸比旁边，仰头看着他：\u201C爸比不要生气，老师说，一个人对喜欢的人才会着急，才会担心。\u201D\n\u201C你就原谅爹地太喜欢你了吧。\u201D\n爹地连忙捂住你的嘴，他看起来很想问问老师，你在课堂上到底学了些什么。" },
+    ]
+  },
+  {
+    id: "midnight_snack", title: "半夜偷看到深夜厨房", icon: "🍜", age: "all",
+    desc: "凌晨一点，你因为想上厕所，揉着眼睛爬下床，走廊尽头透出一小片暖黄色的光。你听见厨房传来锅铲轻碰的声音，和压低了嗓子的对话。",
+    choices: [
+      { text: "暗中观察", effect: { liang: 5, secret: -1 }, icon: "👀",
+        result: "你探头看向厨房。爸比穿着睡衣，头发乱糟糟的，正站在灶台前煮什么。爹地靠在旁边的冰箱上，手里端着一杯水，看着爸比的背影。\n然后爹地走过去，就着爸比手里的勺子尝了一口汤：\u201C淡了。\u201D他往锅里加了一点盐，搅了搅，又舀起一勺递到爸比嘴边：\u201C尝尝。\u201D\n你看到爸比伸手搂住爹地的腰，把脸贴在他肩上：\u201C你喜欢就好\u201D\n✨ 解锁【深夜厨房】" },
+      { text: "过去加入他们", effect: { hm: 4, sm: 2, liang: 3 }, icon: "🍜",
+        result: "你打着哈欠出现在餐桌前：\u201C好香，我也要吃。\u201D两个人同时回头：\u201C你怎么醒了？\u201D\n\u201C饿了...\u201D你的肚子配合地叫了一声。\n爹地拿出你的小碗，开始给你盛面。你爬上餐椅，两条腿晃来晃去。爸比把一杯温好的牛奶放在你面前，然后坐在你旁边。\n爹地把面端过来，放在你面前，吹了吹才推给你：\u201C小心烫。\u201D" },
+      { text: "太困了直接回房", effect: { secret: 1, sm: 1 }, icon: "🚰",
+        result: "你真的很困，眼皮都快睁不开了。被子蒙住头之前，你隐约听到厨房传来很低很低的声音。\n\u201C哈民nim...面好了吗？好饿...\u201D\n\u201C好了好了，我来啦面来啦。\u201D" },
+      { text: "听到他们提到你", effect: { liang: 5, qv: 1 }, icon: "💭",
+        result: "\u201C小核桃说幼儿园有个小朋友，她妈妈每天都会给她扎很漂亮的头发。\u201D\n你还不太懂为什么这句话会引起两个人的沉默，你只是随口一说，而且你的爹地爸比也会给你扎很漂亮的头发啊。\n你看见爹地环抱住爸比，下巴搁在他肩上：\u201C我明天给她扎更好看的，我们会给她很多很多的爱，不会输给别人家的爸爸妈妈的，别担心。\u201D" },
+    ]
+  },
+  {
+    id: "rainy_day", title: "下雨天接爸比", icon: "☔", age: "all",
+    desc: "天色突然暗下来，豆大的雨点砸在窗户上。爹地看了眼窗外，拿起一把雨伞：\u201C我去接爸比。\u201D你已经穿好雨靴，站在门口：\u201C我也去！\u201D",
+    choices: [
+      { text: "自己撑起小雨伞", effect: { hm: 2, sm: 2, liang: 3 }, icon: "🤝",
+        result: "你撑着自己的小花伞，走在前头。\n地铁站出口，你看见爸比站在屋檐下，手里提着一个文件袋，正望着雨发呆。\u201C爸比！\u201D你跑过去，小花伞在人群中晃来晃去。\n爸比低头看你，嘴角微微弯了一下，他抬头看向你身后的人，然后小跑进爹地的雨伞下。\n两个人挤在一把黑伞下，肩膀挨着肩膀。\n你撑着自己的小花伞走在前头，时不时回头看。" },
+      { text: "钻进他们中间说要一起撑", effect: { sm: 2, hm: 2, liang: 6 }, icon: "💪",
+        result: "到了地铁站，接到爸比后，你突然从两个人中间钻进去，举起自己的小手挡住头顶：\u201C我要和你们一起撑。\u201D\n爹地笑了：\u201C伞不够大。\u201D\n你不管，一只手拉着爹地的裤腿，一只手拉着爸比的衣角：\u201C那你们靠近一点嘛。\u201D\n爹地和爸比对视了一眼，两个人默契的往中间靠拢，你被夹在中间，头顶是爹地的伞，周围是两个人的体温。\n✨ 解锁【液态三明治】" },
+      { text: "发现爹地的肩膀湿了", effect: { sm: 3, liang: 5 }, icon: "☔",
+        result: "回来的路上，你走在爹地旁边，发现他的左肩颜色比右边深，雨水顺着伞边淌下来，全滴在他肩上。\n\u201C爹地，你的肩膀湿了。\u201D你指着他的肩。\n爸比探头看过去，随后将向自己这边倾斜的伞往旁边推去：\u201C哥，你比我更容易感冒。\u201D\n爹地有些不好意思地笑笑，说得倒也没错。" },
+      { text: "跑进雨里踩水坑", effect: { liang: 4, sm: 2, hm: 2 }, icon: "💦",
+        result: "回家的路上你看到路边有一个大水坑，兴奋的跑过去\u201C啪\u201D的踩了一脚。水花四溅，你的雨裤上全是泥点。\n\u201C别踩！\u201D爹地在身后喊。\n你没听话，又踩了一脚。\n啊哦...完蛋了。水花溅到了爹地裤子上...爹地有洁癖啊...\n爸比扶额，嘴角抽动两下，拉住爹地的手臂：\u201C小事小事，都可以洗干净的。\u201D" },
+    ]
+  },
+  {
+    id: "fall_ill", title: "爸比生病了", icon: "🤒", age: "all",
+    desc: "爸比很少生病，但一旦生病就很严重。他裹着被子靠在床头，脸色有点白，鼻尖红红的。爹地忙着给他量体温、倒水、煮粥、找药。",
+    choices: [
+      { text: "凑过去围观", effect: { liang: 4, hm: 2 }, icon: "👁️",
+        result: "你搬了个小板凳，放在爹地床边，坐上去，双手托腮，开始围观。爹地端着粥碗正要喂爸比。\n\u201C张嘴。\u201D爹地把勺子递到爸比嘴边。\n爸比看了看勺子，又看了看你，他有些不自在的咳了两声。爹地会意，转过头和你商量：\u201C宝贝先出去看动画片好不好？\u201D\n你摇头：\u201C我不说话，你们当我不存在。\u201D爸比终于开口，声音有点哑：\u201C你这么大一个人，怎么当不存在。\u201D\n你挪了挪小板凳，把自己藏到窗帘后面，露出一双眼睛：\u201C这样呢？\u201D" },
+      { text: "在门口偷看", effect: { hm: 3, liang: 2 }, icon: "👁️",
+        result: "你路过主卧，门没关严，留了一条缝。你听到爹地的声音，异常温柔，甚至胜过平时和你讲话。\n你停下来，眼睛凑到门缝上。\n爹地坐在床边，手里拿着一条湿毛巾，正在帮爸比擦脸。从额头到脸颊，再到下巴。\n爸比闭着眼睛，脸上没什么表情，但眉头是舒展的。\n\u201C河民，还好吗？\u201D爹地的语气听起来很是焦虑。\n\u201C好多了，哥别担心了。\u201D爸比抓住爹地的手，把手贴在自己脸上：\u201C你看，是不是已经降温了？\u201D\n✨ 解锁【最软的一次】" },
+      { text: "说要照顾爹地", effect: { hm: 4, qv: 2 }, icon: "💇",
+        result: "\u201C爹地，你休息，我来照顾爸比！\u201D你面色认真的宣布你的决定。\n爹地端着水杯，愣了一下：\u201C你来？\u201D你点头，拿走爹地手里的水杯，学着大人的样子递给爸比：\u201C爸比，喝水。\u201D\n爸比接过水杯，喝了一小口，把杯子还给你，放下水杯后，你又从床头柜上拿起体温计。\n\u201C爸比，张嘴。\u201D爸比看着你手里的体温计，...额温枪，到底要张什么嘴啊？\n但他还是张了一下嘴。\n爹地就在一旁，看你装模作样的给爸比测体温。\n幸好他在你来之前就已经喂你爸比吃药了，否则真是胡闹了。" },
+      { text: "跑去拿自己的玩具听诊器", effect: { liang: 6, secret: -1 }, icon: "📷",
+        result: "你跑回自己房间，翻出玩具医药箱，拎着听诊器跑回主卧。\n\u201C医生来了！\u201D你大喊。\n爹地正在给爸比换额头上的湿毛巾，被你吓得手一抖，毛巾差点掉爸比脸上。\n\u201C什么医生？\u201D\n你戴上玩具听诊器，一本正经的说：\u201C我是李医生。谁生病了？\u201D\n爸比靠在枕头上，面无表情地看着你。爹地配合地指了指爸比：\u201C这位病人。\u201D你走过去，把听诊器贴在爸比胸口，皱着眉头听了半天。\n\u201C病得很重啊。\u201D\n爹地在旁边忍着笑：\u201C那怎么办？\u201D\n你：\u201C需要打针！\u201D\n爸比眉头动了一下。爹地赶紧说：\u201C不用打针吧？吃药就行。\u201D你摇头：\u201C不行，要打针。不然好不了。\u201D\n这场看诊，最终由患者以及患者家属的不遵医嘱而结束。\n爹地正在给爸比喂药，你蹲在床头柜旁，把听诊器贴在自己耳朵上。" },
+    ]
+  },
+  {
+    id: "TV", title: "一家人看电视", icon: "📺", age: "all",
+    desc: "周末的晚上，客厅里只开了一盏落地灯。你洗完澡，穿着小熊睡衣来到客厅，电视里在放你最喜欢的动画片，爹地和爸比会陪你一起看。",
+    choices: [
+      { text: "头靠在爸比腿上", effect: { hm: 6, sm: 1 }, icon: "🛋️",
+        result: "你走到爸比身边，爬上沙发，把脑袋往后一仰，刚好枕在爸比的膝盖上。\n爸比低头看你，你仰着头他。这个角度很刁钻，大部分人都会变得丑丑得，但是你爸比不会，依然很帅。\n\u201C我想这样看动画片。\u201D你说。\n爸比把水果盘放在沙发扶手上，一只手轻轻搭在你额头上。" },
+      { text: "要爹地抱", effect: { sm: 6, hm: 1 }, icon: "🫂",
+        result: "你走到沙发前，张开双臂：\u201C爹地抱。\u201D\n他把你抱进怀里，你发现他的家居服软软的，有洗衣液的味道。他把下巴搁在你头顶，两只手环过来，把你整个人圈住。\n\u201C这样看得到电视吗？\u201D爹地问。\n你点头。从爹地的怀里看出去，电视屏幕刚好在他手臂围成的框框里。" },
+      { text: "你想坐他俩中间", effect: { qv: 3, liang: 4 }, icon: "👀",
+        result: "动画片还没开始，你已经做好规划了。\n\u201C爹地坐左边，爸比坐右边，我坐中间。\u201D你左指指右划划，像个交警。\n爹地边笑边乖乖坐到左边，爸比也坐到了右边。你满意的点点头，在两个人中间坐下。\n\u201C好了，开始看吧。\u201D" },
+      { text: "爹地和爸比一起坐，我一个人坐", effect: { hm: 5, sm: 5, liang: 5 }, icon: "🪑",
+        result: "\u201C你们两个坐一起。\u201D你指了指大沙发，自己搬了个小凳子，坐在对面。爹地愣了：\u201C你不跟我们一起？\u201D你摇头：\u201C我坐这里看得更清楚。\u201D\n还是要给他们俩一点二人空间啦（其实是动画片更重要）。\n✨ 解锁【小小成全者】" },
+    ]
+  },
+  {
+    id: "roller_coaster", title: "游乐园的一天", icon: "🎢", age: "all",
+    desc: "周末的游乐园人很多，你一手牵着爹地一手牵着爸比，过山车在空中翻腾旋转，你停下了脚步，眼睛一下子就亮了。",
+    choices: [
+      { text: "要爹地一起坐过山车", effect: { liang: 8, secret: -1 }, icon: "💗",
+        result: "你拉着爹地的手，指向过山车：\u201C爹地！我们一起去坐那个！\u201D\n爹地抬头看了一眼过山车，笑了：\u201C好啊。\u201D\n他转头看向爸比，爸比正看着过山车，表情看似面色平静，但你注意到他握着棉花糖的手指收紧了一点。\n\u201C河民，你去吗？\u201D爹地问。\n爸比：\u201C你们去...我在这里等。\u201D" },
+      { text: "要爸比一起坐过山车", effect: { liang: 5, hm: 2, sm: 2 }, icon: "💞",
+        result: "你拉着爸比的手，指向过山车：\u201C爸比！你陪我坐那个！\u201D\n爸比抬头看了一眼过山车，沉默几秒后，他决定和你商量一下：\u201C宝贝，我们换一个好不好？\u201D\n\u201C为什么？\u201D你不解\n\u201C我觉得那个不好玩...\u201D\n调解员爹地上线：\u201C宝贝，我陪你坐好不好？\u201D" },
+      { text: "想要一个人坐过山车", effect: { liang: 3 }, icon: "🎢",
+        result: "\u201C我想一个人坐。\u201D\n爹地正在喝饮料，差点呛到：\u201C什么？\u201D\n\u201C我想自己去玩，你们在下面等我好不好？\u201D你期待的仰起头看向他俩，你已经是大孩子了！\n爹地放下饮料瓶，蹲下来看着你：\u201C宝贝，你还太小了。过山车要求大人陪同。\u201D\n你指了指旁边的告示牌：\u201C一米二以上可以一个人坐。我一米二一。\u201D\n爹地、爸比：\u201C...\u201D" },
+      { text: "要他们两个一起陪你坐过山车", effect: { qv: 3 }, icon: "👨‍👨‍👧",
+        result: "你拉着两个人的手往过山车方向拽：\u201C我们一起坐过山车吧！\u201D\n爹地先看向了爸比，有些犹豫：\u201C河民？\u201D爸比看向过山车，看向着那些尖叫的人，看向那个高高的俯冲坡道。然后他低头看你。\n你正仰着脸看他，眼睛亮晶晶的：\u201C爸比，我们一起嘛，我们三个一起。\u201D\n\u201C好吧。\u201D\n你莫名从中感知到一些悲壮的意味。" },
+    ]
+  },
+  {
+    id: "rebellion", title: "你第一次顶嘴", icon: "🌩️", age: "middle",
+    desc: "爸比原本答应了要给你买冰淇淋，但因为你感冒了，所以他拒绝了你的冰淇淋请求。你觉得很被欺骗，于是在闹脾气。",
+    choices: [
+      { text: "和他顶嘴", effect: { hm: -5, sm: -2, liang: -2 }, icon: "💢",
+        result: "\u201C你说话不算数！\u201D\n爸比低头看着你：\u201C你现在不可以吃冰淇淋，下周给你买好不好？\u201D你又生气又委屈的盯着他。\n爹地走过来，蹲下来拉你的手：\u201C宝贝，爸比是为你好。不可以对他发脾气哦。\u201D\n讨厌，爹地每次都帮爸比。" },
+      { text: "甩门进房间", effect: { sm: -3, hm: -2, liang: -2 }, icon: "🚪",
+        result: "你把自己关进房间，把门反锁了，眼泪啪嗒啪嗒的往下掉。\n五分钟后，有人敲门。\u201C宝贝，开门好不好？\u201D是爹地。你不出声。又过了一会儿，另一个声音：\u201C把门打开。\u201D\n是爸比。\n\u201C冰淇淋下周给你买两个。\u201D爸比加码。你吸了吸鼻子，在房间里问：\u201C真的吗？\u201D\n\u201C恩。\u201D\n\u201C说话算数？\u201D\n\u201C算数。\u201D" },
+      { text: "停下来道歉", effect: { hm: 6, sm: 3, liang: 5, qv: 4 }, icon: "🙇",
+        result: "闹完脾气的你，看着沉默的爸比突然很内疚。爹地牵住你的手，把你轻轻推向爸比：\u201C你让爸比伤心了，好孩子应该知错就改对不对？\u201D\n\u201C对...\u201D你吸了吸鼻子。\n\u201C去和爸比道歉。\u201D\n\u201C对不起。\u201D你的声音很小，不过爸比从来不会生你的气，这次也不例外。\n✨ 解锁【真的长大了】" },
+      { text: "忍着眼泪不说话", effect: { sm: -1, hm: 4, liang: 2 }, icon: "😢",
+        result: "你站在那里，眼眶开始发热，但你抿住嘴唇，不让眼泪掉下来。\n爸比无奈的叹口气，爹地拍拍他的肩，示意交给自己：\u201C宝贝，我们今天把冰淇淋买回家，但是你感冒好了才能吃，好吗？\u201D\n你终于抬起头，眨巴眨巴眼睛：\u201C好...\u201D\n\u201C宝贝跟你简直一模一样，想要什么东西的时候，固执的要命。\u201D这天晚上，你路过爹爸卧室门口，听见爹地在吐槽你和爸比。\n\u201C哪有...\u201D爸比的声音听起来有点心虚。" },
+    ]
+  },
+  {
+    id: "hot_spring", title: "能不能泡温泉？", icon: "♨️", age: "middle",
+    desc: "今年的结婚纪念日，爹地爸比决定去日本旅行庆祝。你们定了一个有私人温泉的大房子，爹地说你不会游泳，所以不能和他们一起去泡温泉。",
+    choices: [
+      { text: "思考着\u201C为什么不会游泳就不能泡温泉\u201D入睡", effect: { sm: 5, liang: 6 }, icon: "💤",
+        result: "你躺在被子里，怎么也睡不着。为什么不会游泳就不能泡温泉？\n泡在热水里为什么要会游泳？\n你又翻了个身，把被子拉过头顶。走廊上传来脚步声和门轴转动声，然后院外水池里传来\u201C哗啦\u201D的水声。\n你的眼皮慢慢沉了下去，半梦半醒之间，你好像想明白了。爹地和爸比可能只是吃一包软糖。\n就像你有时候也想一个人吃完整包软糖，不想分给别人。" },
+      { text: "问他们为什么不会游泳就不能泡温泉？", effect: { hm: 5, liang: 6 }, icon: "❓",
+        result: "\u201C...因为你太矮了，水太深，不会游泳的话会呛水的。\u201D爸比解释道。\n真是恶语伤人心，怎么能说小孩子矮呢...还会长高的啊！" },
+      { text: "一家人要共进退，都不要泡温泉", effect: { liang: 8, secret: -1 }, icon: "🤝",
+        result: "\u201C如果我不能泡的话，你们也不可以泡！\u201D\n\u201C为什么？\u201D\n\u201C因为一家人要共进退。\u201D你叉着腰，\u201C老师说的。\u201D\n爹地看了看爸比，爸比看了看爹地。\u201C你什么时候这么听老师的话了？\u201D爹地问。\n你理直气壮：\u201C今天。\u201D\n✨ 解锁【一家共进退】" },
+      { text: "偷看他们泡温泉", effect: { qv: 3, liang: 3 }, icon: "🫣",
+        result: "你蹑手蹑脚地爬起来，穿上小拖鞋，沿着走廊往温泉的方向走。\n温泉池里，爹地和爸比面对面坐着。爹地靠在石头上，头发湿漉漉地贴在额头上。爸比背对着你，肩膀露在水面上，水珠顺着他的肩线往下滑。\n你看到爹地从水里伸出手，拉住了爸比的手腕，将他往前拉了一点。两个人之间的距离慢慢变近...\n结果你不小心踩到树枝，\u201C咔嚓\u201D一声。\n两个人同时看向你的方向，你只好从石头后面慢慢探出脑袋。\n\u201C好奇宝宝来了...\u201D爹地捂着脸，肩膀笑得一抖一抖的。" },
+    ]
+  },
+  {
+    id: "hanabi", title: "日本花火大会", icon: "🎆", age: "middle",
+    desc: "日本旅行时，你们刚好碰上日本烟火大会。你穿着浅蓝色的浴衣，上面印着金鱼图案，左手牵着爸比，右手牵着爹地，跟随着人群一起走向花火大会。",
+    choices: [
+      { text: "想要坐在爸比肩上看烟火", effect: { hm: 6, liang: 3 }, icon: "🏃‍♂️",
+        result: "\u201C爸比，我看不见。\u201D你拉了拉爸比的浴衣袖子。\n爸比蹲了下来，让你爬上他的肩，然后他站起来，把你稳稳地架在肩膀上。\n你的视野突然变高，人群都在你脚下，你看见一朵烟花升起来，在最高处绽放成无数颗星星。\n爸比的手握着你的脚踝，怕你掉下去。他的手很暖，掌心还有一点潮。" },
+      { text: "想要坐在爹地肩上看烟火", effect: { sm: 6, liang: 3 }, icon: "🌟",
+        result: "\u201C爹地，我想坐你肩上。\u201D前面那个叔叔太高了，挡住了你的半个天空。\n爹地蹲下来，把你架到肩膀上。你的手扶着他的头顶，他的头发在指缝间蹭来蹭去，有点扎手。\n\u201C抓紧了。\u201D爹地说。\n\u201C恩！\u201D然后你抓紧了他的头发。\n\u201C不是抓头发...\u201D爹地很是无奈，他摸索着把你的手从他头顶拿下来，放在他肩膀上：\u201C抓这里。\u201D" },
+      { text: "牵着他们的手，想要荡秋千", effect: { liang: 8, secret: -1 }, icon: "🎏",
+        result: "烟花在空中绽放的时候，你们站在远远的山坡上观看。\n你站在爹地和爸比中间，两只手各牵一个。\n\u201C准备好了吗？一、二、三，起！\u201D爹地和爸比接收到了你想荡秋千的愿望。\n两个人同时把你提起来，你的脚离开地面，像秋千一样往前荡了一下。\u201C还要再一次！\u201D你笑出了声。\n\u201C一、二、三，起！\u201D\n这次荡得更高了，你的浴衣下摆飞起来，浴衣上的金鱼游向了天空。\n✨ 解锁【三人秋千】" },
+      { text: "看见烟火也要许愿", effect: { qv: 3, liang: 3 }, icon: "🎆",
+        result: "\u201C看到流星可以许愿，烟花也可以！\u201D烟花绽放的时候，你双手合十，闭上眼睛。\n爹地笑着纠正：\u201C可是烟花不是流星。\u201D\n\u201C差不多嘛...都是天上掉下来的。\u201D\n周围的人群在欢呼，烟花在头顶一声接一声地炸开，像心跳。\n你的愿望是：\n希望爹地永远开心健康。\n希望爸比永远开心健康。\n希望我们三个人永远开心健康的在一起。\n✨ 解锁【三个愿望】" },
+    ]
+  },
+
+];
+
+const AGE_RANK = { young: 1, all: 2, middle: 3 };
+const AGE_MAP = { young: "👶 幼年期（3-6岁）", middle: "🏫 少年期（13-15岁）", all: "全年龄" };
+
+const STAT_CFG = {
+  qv:     { label: "乖巧值",     max: 50, color: "#6ee7b7", icon: "😇" },
+  sm:     { label: "爹地亲密",   max: 50, color: "#93c5fd", icon: "🧊" },
+  hm:     { label: "爸比亲密",   max: 50, color: "#fca5a5", icon: "🔥" },
+  liang:  { label: "两爸关系值", max: 50, color: "#c4b5fd", icon: "💞" },
+  secret: { label: "秘密槽",     max: 10, color: "#fde68a", icon: "🤫" },
+};
+
+// ───── 结局系统 ─────（爹地=松河 / 爸比=河民 / 核桃=孩子）
+const ENDINGS = [
+  { id: "family_heirloom", name: "家族信物", icon: "💍",
+    cond: (s, a) => a.has("家族信物"),
+    text: "你永远记得那个早晨：他们以为你还在睡，爹地拿出一个红色小盒子，里面是给你的小项链、给爸比的对戒。爸比惊喜的那一声「哥！」、爹地轻描淡写的「你也是我的宝宝啊」——这是你替他们守着的，这个家最幸福的秘密。" },
+  { id: "three_wishes", name: "三个愿望", icon: "🎆",
+    cond: (s, a) => a.has("三个愿望"),
+    text: "日本花火大会的夜晚，烟花在头顶炸开。你双手合十：「希望爹地永远开心健康，希望爸比永远开心健康，希望我们三个人永远在一起。」多年以后你才明白，许愿这件事，从来不是给烟花的——是给你身边那两个人的。" },
+  { id: "perfect", name: "完美家庭", icon: "🏆",
+    cond: (s) => s.sm >= 35 && s.hm >= 35 && s.liang >= 35 && s.secret <= 2,
+    text: "爹地和爸比都信任你，你也信任他们。家里没有秘密，也没有需要绕开的话题。你长大成人那天，他们一起出现在你身后——一个依然要强，一个依然温柔，依然彼此最重要，也依然把你护在中间。" },
+  { id: "secret_explosion", name: "秘密爆发", icon: "💥",
+    cond: (s) => s.secret >= 8,
+    text: "秘密终于全部摊开。爹地和爸比沉默了五秒，爸比先开口：「为什么不早说？」爹地没问问题，他只是看着你。这一晚很长，但说完之后，你睡得是最近最好的一觉。" },
+  { id: "broken", name: "家庭裂痕", icon: "🌧️",
+    cond: (s) => s.liang <= 8,
+    text: "爹地和爸比之间的话越来越少。这不是他们的本意，但他们都太骄傲了，不肯先开口。直到你坐到他们中间，把两个人的手放在一起。爸比先红了眼，爹地沉默了很久，最后说了一句：「对不起。」" },
+  { id: "babi_lean", name: "偏心爸比", icon: "🔥",
+    cond: (s) => s.hm - s.sm >= 18,
+    text: "你和爸比更亲，这不是秘密。但你慢慢发现，每次你冷落爹地之后，爸比都会悄悄陪他坐久一点。你心里渐渐明白：在这个家，没有人需要被偏心，因为他们已经把彼此偏成了第一。" },
+  { id: "diedi_lean", name: "偏心爹地", icon: "🧊",
+    cond: (s) => s.sm - s.hm >= 18,
+    text: "你和爹地更像。同样要强，同样不爱说软话。但每当你和他冷战时，最先来敲门的总是爸比——他懂你们父子俩的语言。原来你和爹地的相似，最早是爸比看穿的。" },
+  { id: "kitchen", name: "深夜厨房", icon: "🍜",
+    cond: (s, a) => a.has("深夜厨房") || (s.hm >= 30 && s.liang >= 25),
+    text: "很多年后你回想起这个家，第一个画面总是深夜厨房：爸比在做夜宵，爹地靠在冰箱边，伸手就着勺子尝一口汤——「淡了。」然后他往锅里加了一点盐，又舀起一勺递到爸比嘴边。他们以为你睡了。其实你看了很多年。" },
+  { id: "soft_moment", name: "最软的一次", icon: "🪶",
+    cond: (s, a) => a.has("最软的一次"),
+    text: "你见到了爹地最不像爹地的瞬间——爸比生病那晚，他坐在床边，用温毛巾一寸一寸帮爸比擦脸，从额头到下巴，眼里全是焦虑。爸比抓住他的手贴在自己脸上：「是不是已经降温了？」那一刻的温柔，比你这辈子见过的所有甜言蜜语都重。" },
+  { id: "guardian", name: "一家共进退", icon: "🤝",
+    cond: (s, a) => a.has("一家共进退"),
+    text: "你站在温泉门口叉着腰：「如果我不能泡，你们也不可以泡。一家人要共进退。」爹地看了看爸比，爸比看了看爹地，他们都笑了。多年以后你才知道，那一晚他们什么都没泡，三个人挤在榻榻米上吃了一整包软糖。" },
+  { id: "ordinary", name: "平凡的一天", icon: "🌤️",
+    cond: () => true,
+    text: "今天没什么大事。爹地早上又骗你起床，爸比做了你爱吃的。你考试一般，吵架普通，被夸了一句也没怎么放心上。但你记住了——这种平凡，已经是最好的版本。" },
+];
+
+const pickEnding = (stats, achv) => ENDINGS.find(e => e.cond(stats, achv)) || ENDINGS[ENDINGS.length - 1];
+
+function StatBar({ id, value }) {
+  const cfg = STAT_CFG[id];
+  const pct = Math.min(100, (value / cfg.max) * 100);
+  const danger = id === "secret" && value >= 5;
+  return (
+    <div style={{ marginBottom: 9 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9ca3af", marginBottom: 3 }}>
+        <span>{cfg.icon} {cfg.label}</span>
+        <span style={{ color: "#d1d5db" }}>{id === "secret" ? `${value}/10格` : value}</span>
+      </div>
+      <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 6, height: 7 }}>
+        <div style={{
+          width: `${pct}%`, height: "100%",
+          background: danger ? "#ef4444" : cfg.color,
+          borderRadius: 6, transition: "width 0.5s ease",
+          boxShadow: `0 0 6px ${cfg.color}66`,
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [stats, setStats] = useState({ qv: 20, sm: 20, hm: 20, liang: 25, secret: 0 });
+  const [scene, setScene] = useState(null);
+  const [phase, setPhase] = useState("home"); // home | scene | result | ending
+  const [result, setResult] = useState(null);
+  const [chosenText, setChosenText] = useState("");
+  const [chosenIcon, setChosenIcon] = useState("");
+  const [chosenEffect, setChosenEffect] = useState({});
+  const [history, setHistory] = useState([]);
+  const [achv, setAchv] = useState(new Set());
+  const [playedToday, setPlayedToday] = useState(new Set());
+  const [maxAge, setMaxAge] = useState(2); // 当前已解锁年龄阶段（开局 young+all 均解锁）
+  const [ending, setEnding] = useState(null);
+  // 每天的场景上限：8-12 随机
+  const [dailyLimit, setDailyLimit] = useState(() => 8 + Math.floor(Math.random() * 5));
+
+  // ───── 成就映射（result 文本里包含 ✨ 解锁【XXX】就自动解锁）─────
+  const ACHV_FROM_RESULT_RE = /✨\s*解锁【([^】]+)】/g;
+
+  const applyEffect = (effect, choiceText, prevStats, choiceResult) => {
+    const next = { ...prevStats };
+    Object.entries(effect).forEach(([k, v]) => {
+      next[k] = Math.max(0, Math.min(k === "secret" ? 10 : 50, (next[k] || 0) + v));
+    });
+    const newAchv = new Set(achv);
+    // 数值阈值类成就
+    if (next.sm >= 45) newAchv.add("爹地笑了");
+    if (next.hm >= 45) newAchv.add("爸比哭了");
+    if (next.liang >= 45) newAchv.add("完美配合");
+    if (next.secret === 0 && prevStats.secret > 0) newAchv.add("秘密全清");
+    if (next.sm > 30 && next.hm > 30) newAchv.add("两个爸爸");
+    // result 文本里 ✨ 解锁【XXX】 自动注入
+    if (choiceResult) {
+      let m;
+      const re = new RegExp(ACHV_FROM_RESULT_RE.source, 'g');
+      while ((m = re.exec(choiceResult)) !== null) {
+        newAchv.add(m[1]);
+      }
+    }
+    setAchv(newAchv);
+    setStats(next);
+  };
+
+  // 推进逻辑：玩到 1/3 解锁少年期；池子用「≤ 当前 maxAge」而非「= maxAge」，避免开头被 young 4 个场景困住
+  const unlockMiddle = playedToday.size >= Math.max(3, Math.floor(dailyLimit / 3));
+  const effectiveMaxAge = unlockMiddle ? 3 : maxAge;
+  const availableScenes = SCENARIOS.filter(s =>
+    !playedToday.has(s.id) && AGE_RANK[s.age] <= effectiveMaxAge
+  );
+
+  const pickRandom = () => {
+    // ⭐ firstdad 永远第一个：今天还没玩过任何场景 → 强制出 firstdad
+    if (playedToday.size === 0) {
+      const first = SCENARIOS.find(s => s.id === "firstdad");
+      if (first) {
+        setScene(first);
+        setResult(null);
+        setPhase("scene");
+        return;
+      }
+    }
+    let pool = availableScenes;
+    if (pool.length === 0) {
+      // 当前年龄段全玩过：尝试解锁下一阶段
+      const futureAvailable = SCENARIOS.filter(s => !playedToday.has(s.id) && AGE_RANK[s.age] > effectiveMaxAge);
+      if (futureAvailable.length === 0) {
+        finishDay();
+        return;
+      }
+      const minNext = Math.min(...futureAvailable.map(s => AGE_RANK[s.age]));
+      pool = SCENARIOS.filter(s => !playedToday.has(s.id) && AGE_RANK[s.age] <= minNext);
+      setMaxAge(minNext);
+    } else if (unlockMiddle && maxAge < 3) {
+      setMaxAge(3);
+    }
+    const idx = Math.floor(Math.random() * pool.length);
+    setScene(pool[idx]);
+    setResult(null); setPhase("scene");
+  };
+
+  const choose = (choice) => {
+    const prev = { ...stats };
+    applyEffect(choice.effect, choice.text, prev, choice.result);
+    setResult(choice.result);
+    setChosenText(choice.text);
+    setChosenIcon(choice.icon);
+    setChosenEffect(choice.effect);
+    setHistory(h => [...h, { scene: scene.title, choice: choice.text, icon: choice.icon }].slice(-8));
+    setPlayedToday(prev => new Set([...prev, scene.id]));
+    setPhase("result");
+  };
+
+  const finishDay = () => {
+    const e = pickEnding(stats, achv);
+    setEnding(e);
+    setPhase("ending");
+  };
+
+  const newDay = () => {
+    setPlayedToday(new Set());
+    setMaxAge(2);
+    setEnding(null);
+    setScene(null);
+    setResult(null);
+    setDailyLimit(8 + Math.floor(Math.random() * 5));
+    setPhase("home");
+  };
+
+  const restart = () => {
+    setStats({ qv: 20, sm: 20, hm: 20, liang: 25, secret: 0 });
+    setHistory([]);
+    setAchv(new Set());
+    setPlayedToday(new Set());
+    setMaxAge(2);
+    setEnding(null);
+    setScene(null);
+    setResult(null);
+    setDailyLimit(8 + Math.floor(Math.random() * 5));
+    setPhase("home");
+  };
+
+  const secretDanger = stats.secret >= 5;
+  const allPlayed = playedToday.size >= dailyLimit;
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(160deg, #080814 0%, #0f0f25 50%, #08081a 100%)",
+      fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+      color: "#e8e8f0",
+    }}>
+      <div style={{
+        borderBottom: "1px solid rgba(148,163,184,0.1)",
+        padding: "18px 20px 14px",
+        textAlign: "center",
+        background: "linear-gradient(180deg, rgba(99,102,241,0.12) 0%, transparent 100%)",
+      }}>
+        <div style={{ fontSize: 11, color: "#6366f1", letterSpacing: 4, marginBottom: 5, textTransform: "uppercase" }}>
+          SMTR25 · 帝后向同人 · 虚构创作
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: "#e0e7ff", letterSpacing: 1 }}>松河民孩子模拟器</div>
+        <div style={{ fontSize: 12, color: "#818cf8", marginTop: 3 }}>爹地 × 爸比 · 你是核桃 · v2.2</div>
+      </div>
+
+      <div style={{ maxWidth: 460, margin: "0 auto", padding: "0 16px 48px" }}>
+
+        {/* Stats */}
+        <div style={{
+          background: "rgba(255,255,255,0.035)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 16, padding: "14px 16px", marginTop: 16,
+        }}>
+          {Object.keys(stats).map(k => <StatBar key={k} id={k} value={stats[k]} />)}
+          {secretDanger && (
+            <div style={{ marginTop: 10, padding: "7px 12px",
+              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 8, fontSize: 12, color: "#fca5a5", textAlign: "center" }}>
+              ⚠️ 秘密积累太多了，随时会爆…
+            </div>
+          )}
+        </div>
+
+        {/* Achievements */}
+        {achv.size > 0 && (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[...achv].map(a => (
+              <span key={a} style={{
+                padding: "3px 10px",
+                background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)",
+                borderRadius: 20, fontSize: 11, color: "#c4b5fd",
+              }}>🏅 {a}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Today progress */}
+        {phase !== "ending" && (
+          <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>
+            今日进度 {playedToday.size}/{dailyLimit} · 当前阶段 {AGE_MAP[Object.keys(AGE_RANK).find(k => AGE_RANK[k] === maxAge)]}
+          </div>
+        )}
+
+        {/* ── HOME ── */}
+        {phase === "home" && (
+          <div style={{ marginTop: 20 }} className="fadein">
+            <div style={{
+              padding: "24px 18px", borderRadius: 18,
+              background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.12)",
+              textAlign: "center", marginBottom: 16,
+            }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🏠</div>
+              <div style={{ fontSize: 14, color: "#c7d2fe", lineHeight: 1.8 }}>
+                你是李松河和李河民的孩子，小名"核桃"。<br/>
+                <span style={{ color: "#818cf8", fontSize: 12 }}>
+                  爹地有偶像包袱，爸比会做饭——<br/>今天又会发生什么？
+                </span>
+              </div>
+            </div>
+
+            {!allPlayed ? (
+              <button onClick={pickRandom} style={{
+                width: "100%", padding: "15px",
+                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                border: "none", borderRadius: 14, color: "#fff",
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(99,102,241,0.35)", marginBottom: 14,
+              }}>{playedToday.size === 0 ? "开始这一天 🌅" : "随机今日事件 🎲"}</button>
+            ) : (
+              <button onClick={finishDay} style={{
+                width: "100%", padding: "15px",
+                background: "linear-gradient(135deg, #db2777 0%, #f59e0b 100%)",
+                border: "none", borderRadius: 14, color: "#fff",
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(219,39,119,0.35)", marginBottom: 14,
+              }}>查看今日结局 ✨</button>
+            )}
+
+            {playedToday.size > 0 && (
+              <button onClick={finishDay} style={{
+                marginTop: 14, width: "100%", padding: "10px",
+                background: "transparent", border: "1px solid rgba(245,158,11,0.4)",
+                borderRadius: 10, color: "#fbbf24", fontSize: 12, cursor: "pointer",
+              }}>提前结束今天，查看结局 →</button>
+            )}
+          </div>
+        )}
+
+        {/* ── SCENE ── */}
+        {phase === "scene" && scene && (
+          <div style={{ marginTop: 20 }} className="fadein">
+            {scene.age !== "all" && (
+              <div style={{ textAlign: "center", marginBottom: 10, fontSize: 12, color: "#6366f1" }}>
+                {AGE_MAP[scene.age]}
+              </div>
+            )}
+            <div style={{
+              padding: "22px 18px", borderRadius: 18,
+              background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.12)",
+              textAlign: "center", marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>{scene.icon}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#e0e7ff", marginBottom: 10 }}>{scene.title}</div>
+              <div style={{ fontSize: 13, color: "#a5b4fc", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{scene.desc}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {scene.choices.map((c, i) => (
+                <button key={i} onClick={() => choose(c)} style={{
+                  padding: "13px 16px",
+                  background: "rgba(255,255,255,0.035)", border: "1px solid rgba(99,102,241,0.18)",
+                  borderRadius: 12, color: "#e0e7ff", fontSize: 13, cursor: "pointer",
+                  textAlign: "left", display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>{c.icon}</span>
+                  <span>{c.text}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setPhase("home")} style={{
+              marginTop: 12, width: "100%", padding: "9px",
+              background: "transparent", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10, color: "#6b7280", fontSize: 12, cursor: "pointer",
+            }}>← 返回主页</button>
+          </div>
+        )}
+
+        {/* ── RESULT ── */}
+        {phase === "result" && (
+          <div style={{ marginTop: 20 }} className="fadein">
+            <div style={{
+              padding: "22px 18px", borderRadius: 18,
+              background: "rgba(99,102,241,0.09)", border: "1px solid rgba(99,102,241,0.18)",
+              marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 30, textAlign: "center", marginBottom: 10 }}>{chosenIcon}</div>
+              <div style={{ fontSize: 12, color: "#818cf8", textAlign: "center", marginBottom: 10 }}>
+                你选择了：{chosenText}
+              </div>
+              <div style={{
+                fontSize: 14, color: "#c7d2fe", lineHeight: 1.85, textAlign: "left", whiteSpace: "pre-wrap",
+                padding: "12px", background: "rgba(255,255,255,0.04)", borderRadius: 10,
+              }}>{result}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12, justifyContent: "center" }}>
+                {Object.entries(chosenEffect).map(([k, v]) => (
+                  <span key={k} style={{
+                    padding: "3px 9px",
+                    background: v > 0 ? "rgba(110,231,183,0.1)" : "rgba(252,165,165,0.1)",
+                    border: `1px solid ${v > 0 ? "rgba(110,231,183,0.3)" : "rgba(252,165,165,0.3)"}`,
+                    borderRadius: 20, fontSize: 11,
+                    color: v > 0 ? "#6ee7b7" : "#fca5a5",
+                  }}>
+                    {STAT_CFG[k]?.icon} {STAT_CFG[k]?.label} {v > 0 ? "+" : ""}{v}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 9 }}>
+              {!allPlayed ? (
+                <button onClick={pickRandom} style={{
+                  flex: 1, padding: "13px",
+                  background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                  border: "none", borderRadius: 12, color: "#fff",
+                  fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>继续今天 🎲</button>
+              ) : (
+                <button onClick={finishDay} style={{
+                  flex: 1, padding: "13px",
+                  background: "linear-gradient(135deg, #db2777, #f59e0b)",
+                  border: "none", borderRadius: 12, color: "#fff",
+                  fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>查看今日结局 ✨</button>
+              )}
+              <button onClick={() => setPhase("home")} style={{
+                padding: "13px 14px",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 12, color: "#9ca3af", fontSize: 13, cursor: "pointer",
+              }}>主页</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── ENDING ── */}
+        {phase === "ending" && ending && (
+          <div style={{ marginTop: 20 }} className="fadein">
+            <div style={{
+              padding: "26px 20px", borderRadius: 20,
+              background: "linear-gradient(135deg, rgba(219,39,119,0.12), rgba(245,158,11,0.10))",
+              border: "1px solid rgba(245,158,11,0.25)",
+              textAlign: "center", marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 11, color: "#fbbf24", letterSpacing: 4, marginBottom: 8 }}>TODAY'S ENDING</div>
+              <div style={{ fontSize: 48, marginBottom: 8 }}>{ending.icon}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#fde68a", marginBottom: 12 }}>【{ending.name}】</div>
+              <div style={{
+                fontSize: 13.5, color: "#fef3c7", lineHeight: 2,
+                padding: "14px", background: "rgba(0,0,0,0.2)", borderRadius: 12,
+                textAlign: "left",
+              }}>{ending.text}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              <button onClick={newDay} style={{
+                width: "100%", padding: "14px",
+                background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                border: "none", borderRadius: 12, color: "#fff",
+                fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>开启新的一天 🌅</button>
+              <button onClick={restart} style={{
+                width: "100%", padding: "11px",
+                background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 12, color: "#9ca3af", fontSize: 12, cursor: "pointer",
+              }}>从头再来（重置全部数值）</button>
+            </div>
+          </div>
+        )}
+
+        {/* History */}
+        {history.length > 0 && phase !== "ending" && (
+          <div style={{ marginTop: 22 }}>
+            <div style={{ fontSize: 11, color: "#4b5563", marginBottom: 8, letterSpacing: 2 }}>今日足迹</div>
+            {[...history].reverse().map((h, i) => (
+              <div key={i} style={{
+                padding: "7px 11px", background: "rgba(255,255,255,0.025)", borderRadius: 8,
+                fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 7,
+                marginBottom: 5,
+              }}>
+                <span>{h.icon}</span>
+                <span style={{ color: "#6366f1" }}>{h.scene}</span>
+                <span>→</span>
+                <span style={{ color: "#9ca3af" }}>{h.choice}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 32, textAlign: "center", fontSize: 10, color: "#1f2937", lineHeight: 2 }}>
+          ※ 虚构同人向创作 · 内容不代表真实艺人 ※
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
